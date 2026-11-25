@@ -1,9 +1,9 @@
-# Muster website
+# Attend website
 
-HTML5, CSS3 and vanilla JavaScript. No framework, no build step. Appwrite Web SDK 13 from a CDN (same as X-Redro). Responsive and mobile-first; designed to also run inside the Muster Android WebView.
+HTML5, CSS3 and vanilla JavaScript. No framework, no build step. Appwrite Web SDK 13 from a CDN (same as X-Redro). Responsive and mobile-first; designed to also run inside the Attend Android WebView.
 
 ## Run it
-1. Edit `assets/js/config.js` (projectId, databaseId, lecturerTeamId). See `../MusterBackend/README.md`.
+1. Edit `assets/js/config.js` (projectId, databaseId, lecturerTeamId). See `../AttendBackend/README.md`.
 2. Serve the folder over HTTPS (Cloudflare Pages static hosting works: no build command, no `functions/` folder). For local testing: `npx serve .` or any static server, with `localhost` added as an Appwrite Web platform.
 
 ## Structure
@@ -23,12 +23,12 @@ assets/js/
 assets/models/ assets/vendor/   where you place the face model (not included)
 _headers               CSP and security headers for Cloudflare Pages / Netlify
 ```
-Every page loads the same script set in the same order, and each page file registers itself under `Muster.pages["role/page"]`.
+Every page loads the same script set in the same order, and each page file registers itself under `Attend.pages["role/page"]`.
 
 ## What needs something outside this folder
-- **Bluetooth attendance:** the Muster Android app. In a normal browser the site says so and does not pretend.
-- **Face verification:** a face recognition model you install (`assets/models/README.md`). Until then it is switched off, never faked.
-- **Lecturer authority in production:** the Lecturers team (`../MusterBackend/README.md`, section E).
+- **Bluetooth attendance:** the Attend Android app. In a normal browser the site says so and does not pretend.
+- **Face verification:** run `node ../AttendBackend/fetch-face-model.mjs` once (`assets/models/README.md`). Until then it is switched off, never faked.
+- **Lecturer authority in production:** the Lecturers team (`../AttendBackend/README.md`, section E).
 
 ## Conventions
 IDs: group = `groups.$id`, session = `attendance_sessions.$id` (also carried in BLE session data), student = Appwrite user ID everywhere. Times are ISO strings. Statuses are lowercase (`present`, `late`, `absent`).
