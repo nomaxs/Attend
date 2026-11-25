@@ -10,8 +10,8 @@ window.ATTEND_CONFIG = {
 
   /* ---- Appwrite connection ---- */
   endpoint: "https://nyc.cloud.appwrite.io/v1",
-  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
-  databaseId: "REPLACE_WITH_YOUR_DATABASE_ID",
+  projectId: "6b0745aa0021ad1d621f",
+  databaseId: "6b0746190017a0a97b7f",
 
   // Collection IDs. These default to the IDs created by AttendBackend/setup-appwrite.mjs.
   // If you create collections by hand with other IDs, change the values (not the keys).
