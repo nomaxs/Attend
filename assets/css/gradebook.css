@@ -1,0 +1,19 @@
+/* Gradebook: spreadsheet-style grid */
+.sheet-wrap { overflow: auto; border: 1px solid var(--grey-200); border-radius: var(--radius); background: var(--paper); max-height: 72vh; -webkit-overflow-scrolling: touch; }
+table.sheet { border-collapse: separate; border-spacing: 0; font-size: .9rem; width: max-content; min-width: 100%; }
+.sheet th, .sheet td { border-right: 1px solid var(--grey-100); border-bottom: 1px solid var(--grey-100); padding: .35rem .55rem; white-space: nowrap; }
+.sheet thead th { position: sticky; top: 0; z-index: 3; background: var(--grey-50); vertical-align: bottom; }
+.sheet thead tr.cat th { top: 0; font-size: .75rem; color: var(--ink-2); font-weight: 700; }
+.sheet .stick { position: sticky; left: 0; z-index: 2; background: var(--paper); min-width: 170px; box-shadow: 1px 0 0 var(--grey-200); }
+.sheet thead .stick { z-index: 4; background: var(--grey-50); }
+.sheet th.att, .sheet td.att { background: #f1f5fb; text-align: center; min-width: 74px; }
+.sheet th.tot, .sheet td.tot { background: var(--brass-soft); font-weight: 700; text-align: center; }
+.sheet td input { width: 64px; min-height: 30px; padding: .15rem .35rem; text-align: center; border: 1px solid transparent; background: transparent; border-radius: 4px; }
+.sheet td input:hover { border-color: var(--grey-300); }
+.sheet td input:focus { border-color: var(--focus); background: #fff; }
+.sheet td input.saving { background: var(--warn-bg); } .sheet td input.saved { background: var(--ok-bg); } .sheet td input.fail { background: var(--bad-bg); }
+.cell-p { color: var(--ok); font-weight: 700; } .cell-l { color: var(--warn); font-weight: 700; } .cell-a { color: var(--bad); font-weight: 700; }
+.col-head { display: flex; align-items: center; gap: .3rem; justify-content: space-between; }
+.col-head small { color: var(--ink-3); font-weight: 400; display: block; }
+.col-head button { border: 0; background: none; cursor: pointer; color: var(--navy-700); padding: 0 .2rem; font-size: 1rem; }
+.band-row { display: grid; grid-template-columns: 90px 1fr 36px; gap: .5rem; margin-bottom: .4rem; }

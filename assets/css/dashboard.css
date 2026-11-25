@@ -1,0 +1,11 @@
+/* Dashboard, course cards, lists */
+.course-card { display: flex; flex-direction: column; gap: .5rem; }
+.course-card .code { font-family: var(--font-head); font-weight: 700; color: var(--brass-ink); }
+.course-card h3 { margin: 0; }
+.joincode { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .14em; font-size: 1.15rem; background: var(--brass-soft); color: var(--brass-ink); padding: .2rem .6rem; border-radius: var(--radius-sm); border: 1px dashed var(--brass); }
+.session-banner { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; border-left: 4px solid var(--brass); }
+.pct { font-family: var(--font-head); font-size: 1.6rem; color: var(--navy-900); }
+.search-row { display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .9rem; }
+.search-row > * { flex: 1 1 180px; }
+.timeline li { align-items: flex-start; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--navy-100); color: var(--navy-800); display: grid; place-items: center; font-weight: 700; flex: none; }
