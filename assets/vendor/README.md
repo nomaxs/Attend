@@ -1,1 +1,1 @@
-Place `face-api.min.js` here (see ../models/README.md). Nothing in this folder is required for attendance, gradebook or reports.
+`face-api.min.js` is placed here by `AttendBackend/fetch-face-model.mjs`. See ../models/README.md.
