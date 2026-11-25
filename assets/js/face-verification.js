@@ -136,6 +136,7 @@ FILE OVERVIEW
   async function enrol(userId, canvases) {
     const vecs = []; for (const c of canvases) vecs.push(await embedOne(c));
     const template = toB64(mean(vecs));
+    if (template.length > 2000) throw new Error("This model's face embedding is too large for the face_profiles.templateData field (2000 characters). Use a model with up to 375 numbers, or enlarge that attribute.");
     const now = M.util.iso(); const existing = await getEnrolment(userId);
     const data = { userID: userId, templateData: template, modelVersion: adapter.version, enrolledAt: now, status: "enrolled" };
     if (existing) await M.db.update("faceProfiles", existing.$id, data); else await M.db.create("faceProfiles", null, data, M.perm.self(userId));

@@ -106,6 +106,7 @@ FILE OVERVIEW
           const lw = Number(api.body.querySelector("#lw").value), mp = Number(api.body.querySelector("#mp").value);
           if (isNaN(lw) || lw < 0 || lw > 1 || isNaN(mp) || mp < 0 || mp > 100) return ui.toast("Check the attendance settings.", "warning");
           const next = { bands, categoryWeights: Object.keys(cw).length ? cw : null, attendance: { lateWeight: lw, minimumPercent: mp } };
+          if (JSON.stringify(next).length > 1900) return ui.toast("Too many grade bands. Remove a few.", "warning");
           try { const prev = S.group.gradingRules; await db.update("groups", gid, { gradingRules: JSON.stringify(next) }); await M.audit(lecturerId, "rules.update", "groups", gid, prev, next); const g = groups.find((x) => x.$id === gid); g.gradingRules = JSON.stringify(next); ui.toast("Grading rules saved.", "success"); api.close(); await reload(); } catch (e) { ui.toast(util.errMsg(e), "error"); }
         } }] });
       const bw = m.body.querySelector("#bands"); const add = (b) => { const d = document.createElement("div"); d.className = "band-row"; d.innerHTML = `<input type="number" min="0" max="100" step="any" value="${b ? b.min : ""}" placeholder="Min %" aria-label="Minimum percent"><input type="text" maxlength="12" value="${b ? esc(b.grade) : ""}" placeholder="Grade" aria-label="Grade"><button class="btn sm ghost" type="button" aria-label="Remove band">✕</button>`; d.querySelector("button").addEventListener("click", () => d.remove()); bw.appendChild(d); };

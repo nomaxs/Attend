@@ -98,7 +98,7 @@ FILE OVERVIEW
 
   /* ---------- audit + notifications ---------- */
   async function audit(userID, action, recordType, recordID, previousValue, newValue) {
-    const clip = (v) => (v == null ? undefined : String(typeof v === "string" ? v : JSON.stringify(v)).slice(0, 1900));
+    const clip = (v) => (v == null ? undefined : String(typeof v === "string" ? v : JSON.stringify(v)).slice(0, 950));
     const data = { userID, action, recordType, recordID: String(recordID).slice(0, 36), createdAt: iso() };
     if (previousValue != null) data.previousValue = clip(previousValue);
     if (newValue != null) data.newValue = clip(newValue);

@@ -41,7 +41,7 @@ FILE OVERVIEW
       { name: "courseName", label: "Course name", value: g && g.courseName, required: true, maxLength: 160 },
       { name: "courseCode", label: "Course code", value: g && g.courseCode, required: true, maxLength: 24, hint: "For example CSC 301" },
       { name: "department", label: "Department", value: (g && g.department) || ctx.profile.department, required: true, maxLength: 160 },
-      { name: "description", label: "Description", type: "textarea", value: g && g.description, maxLength: 2000 }
+      { name: "description", label: "Description", type: "textarea", value: g && g.description, maxLength: 1000 }
     ];
   }
 
