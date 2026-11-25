@@ -4,7 +4,7 @@ FILE OVERVIEW
 // Lecturer pages: dashboard (stats, recent activity, student search), students directory, profile.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, ui } = M;
   const esc = util.esc;
 

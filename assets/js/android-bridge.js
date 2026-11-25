@@ -1,13 +1,13 @@
 /* =========================
 FILE OVERVIEW
 ========================= */
-// Bridge between the website and the Muster Android app (WebView JavaScript interface named "Android").
+// Bridge between the website and the Attend Android app (WebView JavaScript interface named "Android").
 // Native -> web callbacks are the global functions at the bottom: onBluetoothDevicesFound, onBluetoothError,
 // onBluetoothStatusChanged (+ onDeviceCapabilities, onPermissionResult, onCameraPermissionStatus).
 // In an ordinary browser none of the native calls exist: isAvailable() is false and notice() explains why.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const listeners = {};
   const state = { capabilities: null, status: null, devices: new Map(), lastError: null, camera: null };
 
@@ -61,7 +61,7 @@ FILE OVERVIEW
         if (needAdvertise && !c.advertiseSupported) problems.push("This phone cannot advertise over BLE (needed to take part in attendance).");
         if (!c.bluetoothEnabled) problems.push("Bluetooth is turned off. Turn it on and try again.");
         if (!c.permissionsGranted) problems.push("Bluetooth permissions have not been granted yet.");
-        if (c.locationRequired && !c.locationEnabled) problems.push("Turn on Location in your phone settings. Android 11 and older need it for Bluetooth scanning. Muster does not use your location.");
+        if (c.locationRequired && !c.locationEnabled) problems.push("Turn on Location in your phone settings. Android 11 and older need it for Bluetooth scanning. Attend does not use your location.");
       } catch (e) { problems.push(M.util.errMsg(e)); }
       return { ok: problems.length === 0, problems };
     }

@@ -1,11 +1,11 @@
 /* =========================
 FILE OVERVIEW
 ========================= */
-// Central configuration for Muster. This is the ONLY file you edit to connect the website to your Appwrite project.
+// Central configuration for Attend. This is the ONLY file you edit to connect the website to your Appwrite project.
 // No secrets belong here: never put an Appwrite API key in any website file.
 
-window.MUSTER_CONFIG = {
-  appName: "Muster",
+window.ATTEND_CONFIG = {
+  appName: "Attend",
   tagline: "Attendance and performance tracking for tertiary institutions",
 
   /* ---- Appwrite connection ---- */
@@ -13,7 +13,7 @@ window.MUSTER_CONFIG = {
   projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
   databaseId: "REPLACE_WITH_YOUR_DATABASE_ID",
 
-  // Collection IDs. These default to the IDs created by MusterBackend/setup-appwrite.mjs.
+  // Collection IDs. These default to the IDs created by AttendBackend/setup-appwrite.mjs.
   // If you create collections by hand with other IDs, change the values (not the keys).
   collections: {
     userProfiles: "user_profiles",
@@ -40,7 +40,7 @@ window.MUSTER_CONFIG = {
     exports: "REPLACE_WITH_EXPORTS_BUCKET_ID"                 // optional: "Save to private storage" in Reports
   },
 
-  /* ---- Lecturer authority (see MusterBackend/README.md, section "Why a Lecturers team") ----
+  /* ---- Lecturer authority (see AttendBackend/README.md, section "Why a Lecturers team") ----
      Without Appwrite Functions, the only server-enforced way to stop a student from creating "official" records
      is to restrict collection CREATE permission to an Appwrite Team that you control.
      1) Create a Team called "Lecturers" in the Appwrite console and copy its ID here.
@@ -64,13 +64,18 @@ window.MUSTER_CONFIG = {
 
   /* ---- Facial verification ---- */
   face: {
-    // Muster does not ship a face recognition model. See MusterWebsite/assets/models/README.md.
+    // Attend does not ship a face recognition model. See AttendWebsite/assets/models/README.md.
     // Until a model adapter is installed, face enrolment/verification is switched off and the UI says so.
     scriptPath: "assets/vendor/face-api.min.js",     // you add this file
     modelPath: "assets/models",                       // you add the model weight files here
     metric: "euclidean",                              // "euclidean" (pass when distance <= threshold) or "cosine" (pass when similarity >= threshold)
     threshold: 0.55,                                  // face-api.js suggests 0.6 as an upper bound; 0.55 is stricter. Tune on YOUR test data.
     modelVersion: "face-api-resnet128-v1",
-    enrolFrames: 3                                    // frames captured and averaged at enrolment
+    enrolFrames: 3,                                   // frames captured and averaged at enrolment
+    livenessRequired: true,                           // blink + head-turn challenge before any enrolment or verification capture
+    blinkClosedEar: 0.21,                             // eye-aspect-ratio below this = eye closed (tune on real phones)
+    blinkOpenEar: 0.26,                               // above this = eye open again
+    turnDelta: 0.12,                                  // how far the nose must move from centre (0-1 of face width) to count as a head turn
+    livenessStepMs: 8000                              // time allowed per challenge step
   }
 };

@@ -5,7 +5,7 @@ FILE OVERVIEW
 // Passwords go to Appwrite Authentication only. They are never written to any database document.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { account, db, perm, util, ID } = M;
   const base = () => document.body.dataset.base || "";
   const HOME = { student: "student/dashboard.html", lecturer: "lecturer/dashboard.html" };
@@ -50,7 +50,7 @@ FILE OVERVIEW
   }
 
   function renderSetupNeeded() {
-    document.body.innerHTML = '<div class="auth-body"><div class="auth-card"><h1>Connect Muster to Appwrite</h1><p>Open <span class="mono">assets/js/config.js</span> and set <span class="mono">projectId</span> and <span class="mono">databaseId</span> to the real IDs from your Appwrite project.</p></div></div>';
+    document.body.innerHTML = '<div class="auth-body"><div class="auth-card"><h1>Connect Attend to Appwrite</h1><p>Open <span class="mono">assets/js/config.js</span> and set <span class="mono">projectId</span> and <span class="mono">databaseId</span> to the real IDs from your Appwrite project.</p></div></div>';
   }
 
   /* ---------- registration ---------- */

@@ -1,14 +1,14 @@
 /* =========================
 FILE OVERVIEW
 ========================= */
-// The one place the Appwrite client is created. Everything else uses Muster.db / Muster.account / Muster.perm.
+// The one place the Appwrite client is created. Everything else uses Attend.db / Attend.account / Attend.perm.
 // Uses the Appwrite Web SDK 13 CDN global (same as the X-Redro project): Appwrite.Client, Account, Databases, Storage, Teams.
 
 (function () {
-  const C = window.MUSTER_CONFIG;
+  const C = window.ATTEND_CONFIG;
   if (!C) throw new Error("config.js must be loaded before appwrite.js");
   if (!window.Appwrite) { document.body.innerHTML = "<p style='padding:1rem'>The Appwrite SDK failed to load. Check your internet connection.</p>"; throw new Error("Appwrite SDK missing"); }
-  if (window.Muster && window.Muster.client) return; // avoid duplicate initialisation
+  if (window.Attend && window.Attend.client) return; // avoid duplicate initialisation
 
   const client = new Appwrite.Client().setEndpoint(C.endpoint).setProject(C.projectId);
   const account = new Appwrite.Account(client);
@@ -17,7 +17,7 @@ FILE OVERVIEW
   const teams = new Appwrite.Teams(client);
   const { Query, ID, Permission, Role } = Appwrite;
   const DB = C.databaseId;
-  const M = (window.Muster = window.Muster || {});
+  const M = (window.Attend = window.Attend || {});
 
   const isConfigured = () => !/REPLACE/i.test(C.projectId) && !/REPLACE/i.test(C.databaseId);
   const colId = (key) => { const id = C.collections[key]; if (!id) throw new Error("Unknown collection key: " + key); return id; };

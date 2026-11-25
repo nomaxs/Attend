@@ -5,7 +5,7 @@ FILE OVERVIEW
 // (sidebar + top bar), shared calculation helpers, and the page boot sequence.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { util } = M;
   const esc = util.esc;
 

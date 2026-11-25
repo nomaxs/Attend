@@ -7,11 +7,11 @@ FILE OVERVIEW
 // a picture) is not identity verification, so this module refuses to enrol or verify unless a real embedding model is loaded.
 // WHAT YOU MUST INSTALL: see assets/models/README.md (default adapter: face-api.js + its ResNet-128 recognition weights).
 // TRUST LIMIT: with no server-side code, the comparison on the student's phone is evidence, not proof. The lecturer's browser
-// re-compares the submitted probe against the enrolled template (Muster.face.compare) before accepting it.
+// re-compares the submitted probe against the enrolled template (Attend.face.compare) before accepting it.
 // There is NO liveness / anti-spoofing check here (a photo of a face can fool most embedding models).
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const C = M.cfg.face;
   const base = () => document.body.dataset.base || "";
   let adapter = null; let loadError = null; let stream = null;
@@ -35,6 +35,10 @@ FILE OVERVIEW
       if (!window.faceapi) throw new Error("face-api.js did not initialise.");
       const url = base() + C.modelPath;
       await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(url), faceapi.nets.faceLandmark68TinyNet.loadFromUri(url), faceapi.nets.faceRecognitionNet.loadFromUri(url)]);
+    },
+    async landmarks(input) {
+      const r = await faceapi.detectSingleFace(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })).withFaceLandmarks(true);
+      return r ? r.landmarks.positions.map((p) => ({ x: p.x, y: p.y })) : null;
     },
     async embed(input) {
       const all = await faceapi.detectAllFaces(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 })).withFaceLandmarks(true).withFaceDescriptors();
@@ -92,6 +96,40 @@ FILE OVERVIEW
     return v;
   }
 
+  /* ---------- active liveness (challenge-response) ----------
+     The person must blink and turn their head, in a random order, while the camera watches facial landmarks.
+     This stops a still photo being held up to the camera. It does NOT stop a pre-recorded video or a 3D mask, it runs on the
+     phone, and it is not equivalent to the passive liveness in commercial bank-grade SDKs. Treat it as one layer of evidence. */
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const ear = (p, i) => (dist(p[i + 1], p[i + 5]) + dist(p[i + 2], p[i + 4])) / (2 * dist(p[i], p[i + 3]));
+  const eyeEar = (p) => (ear(p, 36) + ear(p, 42)) / 2;                       // 68-point model: eyes are points 36-41 and 42-47
+  const noseRatio = (p) => (p[30].x - p[0].x) / (p[16].x - p[0].x || 1);     // ~0.5 when facing the camera
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const livenessAvailable = () => !!(adapter && typeof adapter.landmarks === "function");
+
+  async function until(video, ms, test) {
+    const end = Date.now() + ms;
+    while (Date.now() < end) { const p = await adapter.landmarks(video).catch(() => null); if (p && p.length === 68 && test(p)) return true; await wait(100); }
+    return false;
+  }
+
+  // onPrompt(text) shows instructions. Resolves { ok, reason }.
+  async function liveness(video, onPrompt) {
+    const st = await init(); if (!st.ready) return { ok: false, reason: st.reason };
+    if (!livenessAvailable()) return { ok: false, reason: "This face model cannot run a liveness check." };
+    const ms = C.livenessStepMs || 8000;
+    const steps = [
+      { name: "blink", prompt: "Blink once", run: async () => { if (!(await until(video, ms, (p) => eyeEar(p) > C.blinkOpenEar))) return false; if (!(await until(video, ms, (p) => eyeEar(p) < C.blinkClosedEar))) return false; return until(video, ms, (p) => eyeEar(p) > C.blinkOpenEar); } },
+      { name: "turn", prompt: "Slowly turn your head to one side", run: () => until(video, ms, (p) => Math.abs(noseRatio(p) - 0.5) > C.turnDelta) }
+    ];
+    if (crypto.getRandomValues(new Uint8Array(1))[0] & 1) steps.reverse();
+    for (const s of steps) { onPrompt && onPrompt(s.prompt); if (!(await s.run())) return { ok: false, reason: "Liveness check not completed (" + s.name + "). Try again in good light." }; }
+    onPrompt && onPrompt("Now look straight at the camera");
+    if (!(await until(video, ms, (p) => Math.abs(noseRatio(p) - 0.5) < 0.07 && eyeEar(p) > C.blinkOpenEar))) return { ok: false, reason: "Please look straight at the camera." };
+    await wait(250);
+    return { ok: true };
+  }
+
   /* ---------- enrolment / verification ---------- */
   const getEnrolment = async (userId) => M.db.first("faceProfiles", [M.Query.equal("userID", userId)]);
 
@@ -132,5 +170,5 @@ FILE OVERVIEW
     await M.db.update("faceProfiles", e.$id, {}, [...perms, want]);
   }
 
-  M.face = { registerAdapter, init, status: async () => init(), compare, startCamera, stopCamera, capture, enrol, removeEnrolment, verify, getEnrolment, shareWithLecturer, get adapterVersion() { return adapter ? adapter.version : null; }, get loadError() { return loadError; } };
+  M.face = { registerAdapter, init, liveness, livenessAvailable, status: async () => init(), compare, startCamera, stopCamera, capture, enrol, removeEnrolment, verify, getEnrolment, shareWithLecturer, get adapterVersion() { return adapter ? adapter.version : null; }, get loadError() { return loadError; } };
 })();

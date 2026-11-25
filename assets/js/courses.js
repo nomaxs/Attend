@@ -6,7 +6,7 @@ FILE OVERVIEW
 // group_members document. Only the lecturer (a Lecturers-team member in production) can create group_members.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, perm, ui } = M;
   const esc = util.esc;
 

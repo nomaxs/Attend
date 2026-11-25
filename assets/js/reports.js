@@ -5,7 +5,7 @@ FILE OVERVIEW
 // save to a private Appwrite bucket) and an academic performance summary.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, ui } = M;
   const esc = util.esc;
 

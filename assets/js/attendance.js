@@ -8,10 +8,10 @@ FILE OVERVIEW
 //
 // TRUST MODEL (no server-side code): students can only CREATE evidence documents (a claim and detections). Official
 // attendance_records can only be created by the lecturer. The lecturer's browser validates the evidence with
-// Muster.logic.resolveSession before anything becomes official. A student's phone never decides its own attendance.
+// Attend.logic.resolveSession before anything becomes official. A student's phone never decides its own attendance.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, perm, ui } = M;
   const esc = util.esc; const A = M.cfg.attendance;
 
@@ -33,9 +33,12 @@ FILE OVERVIEW
     const ephCount = {}; Object.values(claim).forEach((c) => { if (c.ephemeralID) ephCount[c.ephemeralID] = (ephCount[c.ephemeralID] || 0) + 1; });
     const ephOwner = {}; Object.values(claim).forEach((c) => { if (c.ephemeralID && ephCount[c.ephemeralID] === 1) ephOwner[c.ephemeralID] = c.studentID; });
     const strong = (d) => typeof d.signalStrength === "number" && d.signalStrength >= minRssi;
+    // A claim is "approved" only if the lecturer updated it. Students are never given update permission on their claim, so a claim
+    // whose $updatedAt differs from $createdAt was changed by the lecturer. A student cannot forge this by writing "accepted" at creation.
+    const approvedOf = (c) => c.verificationStatus === "accepted" && !!c.$updatedAt && c.$updatedAt !== c.$createdAt;
 
     const out = {};
-    members.forEach((m) => { out[m.studentID] = { studentID: m.studentID, suggested: "absent", method: null, depth: null, ref: null, verifiedAt: null, reasons: [], eligible: false, face: null, hasClaim: !!claim[m.studentID], hasEvidence: !!(claim[m.studentID] || det[m.studentID]) }; });
+    members.forEach((m) => { out[m.studentID] = { studentID: m.studentID, suggested: "absent", method: null, depth: null, ref: null, verifiedAt: null, reasons: [], eligible: false, approved: false, face: null, hasClaim: !!claim[m.studentID], hasEvidence: !!(claim[m.studentID] || det[m.studentID]) }; });
 
     Object.entries(claim).forEach(([sid, c]) => {
       const r = out[sid]; const t = +new Date(c.$createdAt); // server time, not the phone's clock
@@ -49,7 +52,7 @@ FILE OVERVIEW
         if (!recheck) { r.reasons.push("Face evidence could not be re-checked (no probe, or no access to the enrolled template)."); return; }
         if (!recheck.ok) { r.reasons.push("Face did not match the enrolled template on re-check."); return; }
       }
-      r.eligible = true;
+      r.eligible = true; r.approved = approvedOf(c);
     });
 
     if (beaconID) {
@@ -58,7 +61,8 @@ FILE OVERVIEW
         if ((det[sid] || []).some((d) => d.detectedDeviceID === beaconID && strong(d))) { r.depth = 1; r.ref = null; }
       });
       for (let d = 1; d < maxDepth; d++) {
-        const atD = new Set(Object.values(out).filter((r) => r.depth === d).map((r) => r.studentID));
+        // Only students the lecturer has APPROVED act as references for the next hop (their phones start broadcasting on approval).
+        const atD = new Set(Object.values(out).filter((r) => r.depth === d && r.approved).map((r) => r.studentID));
         Object.entries(out).forEach(([sid, r]) => {
           if (!r.eligible || r.depth != null) return;
           const hit = (det[sid] || []).find((x) => strong(x) && ephOwner[x.detectedDeviceID] && ephOwner[x.detectedDeviceID] !== sid && atD.has(ephOwner[x.detectedDeviceID]));
@@ -73,9 +77,9 @@ FILE OVERVIEW
         const lateMs = (Number(session.lateAfterMinutes) || 0) * 60000;
         r.suggested = lateMs && +new Date(r.verifiedAt) - start > lateMs ? "late" : "present";
         r.method = r.depth === 1 ? "ble-direct" : "ble-chain";
-        r.reasons.push(r.depth === 1 ? "Heard the lecturer's beacon directly." : "Heard a verified student (depth " + r.depth + ").");
+        r.reasons.push(r.depth === 1 ? "Heard the lecturer's beacon directly." : "Heard a lecturer-approved student (depth " + r.depth + ").");
       } else if (!beaconID) r.reasons.push("This session had no Bluetooth beacon, so proximity could not be checked. Decide manually.");
-      else r.reasons.push("Lecturer beacon not heard, and no verified student within " + maxDepth + " hop(s).");
+      else r.reasons.push("Lecturer beacon not heard, and no lecturer-approved student heard within " + maxDepth + " hop(s).");
     });
     return out;
   }
@@ -170,12 +174,16 @@ FILE OVERVIEW
         const eff = (sid) => (finalised && recOf[sid] ? { status: recOf[sid].status } : overrides[sid] || { status: res[sid].suggested });
         const verified = [], waiting = [], missing = [];
         b.members.forEach((m) => { const r = res[m.studentID]; const st = eff(m.studentID).status; if (st === "present" || st === "late") verified.push(m); else if (r.hasEvidence && !finalised) waiting.push(m); else missing.push(m); });
+        const claimOf = util.by(b.claims, "studentID");
+        const canApprove = (sid) => session.status === "active" && claimOf[sid] && res[sid].eligible && res[sid].depth != null && !res[sid].approved;
         const li = (m) => { const r = res[m.studentID]; const st = eff(m.studentID).status; const ov = !finalised && overrides[m.studentID]; const rec = recOf[m.studentID];
-          return `<li><span>${esc(m.studentName)}<br><span class="muted small">${esc(m.matricNumber)}${ov ? " · manual" : ""}${rec && rec.manuallyModified ? " · corrected" : ""}</span></span><span class="row">${ui.badge(st)}<button class="btn sm secondary" data-rev="${m.studentID}">${finalised ? "Correct" : "Review"}</button></span></li>`; };
+          return `<li><span>${esc(m.studentName)}<br><span class="muted small">${esc(m.matricNumber)}${r.depth ? " · depth " + r.depth : ""}${ov ? " · manual" : ""}${rec && rec.manuallyModified ? " · corrected" : ""}</span></span><span class="row">${r.approved && !finalised ? '<span class="badge ok">approved</span>' : ui.badge(st)}${canApprove(m.studentID) ? `<button class="btn sm accent" data-appr="${m.studentID}">Approve</button>` : ""}${r.approved && session.status === "active" ? `<button class="btn sm ghost" data-revoke="${m.studentID}">Withdraw</button>` : ""}<button class="btn sm secondary" data-rev="${m.studentID}">${finalised ? "Correct" : "Review"}</button></span></li>`; };
+        const pendingApprove = b.members.filter((m) => canApprove(m.studentID));
         box.innerHTML = `<div class="card"><div class="countdown ${ended ? "ended" : ""}" id="cd"><div class="time" id="cdTime">--:--</div><div class="sub" id="cdSub"></div></div>
           <div class="row between" style="margin-top:1rem"><div><b>${esc(session.title || "Attendance session")}</b> ${ui.badge(session.status)}<div class="muted small">${ui.fmt.dt(session.startTime)} · ${session.durationMinutes} min · late after ${session.lateAfterMinutes} min · max depth ${session.maxReferenceDepth}${session.requireFace ? " · face required" : ""}</div></div><div class="table-actions" id="sessBtns"></div></div>
+          ${session.status === "active" ? '<div class="notice info small" style="margin-top:.8rem">Approve verified students. Once approved, a student\'s phone starts broadcasting, so classmates who cannot reach you can verify through them (up to depth ' + session.maxReferenceDepth + ').</div>' : ""}
           ${!b.secret && session.status !== "finalised" ? '<div class="notice warn small" style="margin-top:.8rem">No beacon record exists for this session, so proximity cannot be validated.</div>' : ""}</div>
-          <div class="roll"><section class="roll-col verified"><header>Verified <span>${verified.length}</span></header><ul>${verified.map(li).join("") || '<li class="muted">Nobody yet</li>'}</ul></section>
+          <div class="roll"><section class="roll-col verified"><header>Verified <span>${pendingApprove.length ? `<button class="btn sm accent" id="apprAll">Approve ${pendingApprove.length}</button> ` : ""}${verified.length}</span></header><ul>${verified.map(li).join("") || '<li class="muted">Nobody yet</li>'}</ul></section>
           <section class="roll-col waiting"><header>Awaiting verification <span>${waiting.length}</span></header><ul>${waiting.map(li).join("") || '<li class="muted">Nobody</li>'}</ul></section>
           <section class="roll-col missing"><header>Not verified <span>${missing.length}</span></header><ul>${missing.map(li).join("") || '<li class="muted">Nobody</li>'}</ul></section></div>`;
         const btns = box.querySelector("#sessBtns");
@@ -185,6 +193,21 @@ FILE OVERVIEW
           add("End now", "secondary", async () => { if (await ui.confirm({ title: "End the session now?", message: "Students can no longer submit verification. You can then review and finalise.", confirmText: "End session" })) { await closeSession(session); render(); } });
           add("Cancel", "ghost", async () => { if (await ui.confirm({ title: "Cancel this session?", message: "No attendance will be recorded.", confirmText: "Cancel session", danger: true })) { await setStatus(session, "cancelled"); await drawGroup(); } });
         } else if (session.status === "closed") add("Finalise attendance", "accent", () => finalise(b, res, eff).then((ok) => ok && drawGroup()));
+        const setApproval = async (sids, accept) => {
+          ui.loading(true);
+          try {
+            for (const sidv of sids) { const c = claimOf[sidv]; const r = res[sidv]; if (!c) continue;
+              const d = { verificationStatus: accept ? "accepted" : "rejected" }; if (accept) { d.referenceDepth = r.depth; if (r.ref) d.referenceStudentID = r.ref; }
+              await db.update("proximity", c.$id, d);
+              await M.audit(lecturerId, accept ? "claim.approve" : "claim.withdraw", "proximity_records", c.$id, null, { studentID: sidv, depth: r.depth });
+            }
+            ui.toast(accept ? "Approved. Their phones will now broadcast to classmates." : "Approval withdrawn.", "success");
+          } catch (e) { ui.toast(util.errMsg(e), "error"); } finally { ui.loading(false); }
+          render();
+        };
+        box.querySelectorAll("[data-appr]").forEach((x) => x.addEventListener("click", () => setApproval([x.dataset.appr], true)));
+        box.querySelectorAll("[data-revoke]").forEach((x) => x.addEventListener("click", () => setApproval([x.dataset.revoke], false)));
+        const aa = box.querySelector("#apprAll"); if (aa) aa.addEventListener("click", () => setApproval(pendingApprove.map((m) => m.studentID), true));
         const cdTime = box.querySelector("#cdTime"), cdSub = box.querySelector("#cdSub"), cd = box.querySelector("#cd");
         const tick = async () => {
           const left = +new Date(session.endTime) - Date.now();
@@ -217,6 +240,7 @@ FILE OVERVIEW
         <div class="evidence stack"><div>System suggestion: ${ui.badge(r.suggested)} ${r.depth ? `<span class="badge info">depth ${r.depth}</span>` : ""}</div>
         <ul>${r.reasons.map((x) => `<li>${esc(x)}</li>`).join("") || "<li>No verification was submitted.</li>"}</ul>
         <div>Claim received (server time): <b>${claim ? ui.fmt.dt(claim.$createdAt) : "none"}</b></div>
+        <div>Liveness (reported by the phone, not independently verifiable): ${claim && claim.livenessPassed ? '<span class="badge ok">challenge passed</span>' : '<span class="muted">not reported</span>'}</div>
         <div>Face: ${f ? (f.ok ? '<span class="badge ok">match</span>' : '<span class="badge bad">no match</span>') + ` <span class="muted">${esc(f.metric)} ${f.score == null ? "" : f.score.toFixed(3)} (threshold ${f.threshold})</span>` : '<span class="muted">not re-checked</span>'}${r.face && r.face.submittedScore != null ? ` <span class="muted">· phone reported ${Number(r.face.submittedScore).toFixed(3)}</span>` : ""}</div>
         ${dets.length ? `<div class="table-wrap"><table><thead><tr><th>Device ID</th><th>Resolved as</th><th>Signal</th><th>Seen</th></tr></thead><tbody>${detRows}</tbody></table></div><div class="muted small">Signal strength is only a rough hint. It is not a distance.</div>` : ""}</div>
         <hr style="border:0;border-top:1px solid var(--grey-200);margin:1rem 0"><div class="form-grid"><div class="field"><label>${finalised ? "Corrected status" : "Decision"}</label><select id="decSel">${STATUS_ORDER.map((s) => `<option value="${s}" ${s === cur ? "selected" : ""}>${s[0].toUpperCase() + s.slice(1)}</option>`).join("")}</select></div><div class="field"><label>Reason ${finalised ? "(required)" : "(required if you change the suggestion)"}</label><input id="decWhy" type="text" maxlength="300" value="${esc((rec && rec.modificationReason) || (overrides[member.studentID] || {}).reason || "")}"></div></div>`;
@@ -299,7 +323,7 @@ FILE OVERVIEW
 
   /* ---------- the verification flow ---------- */
   function verifyPanel(el, ctx, session, group) {
-    const sid = ctx.user.$id; const key = "muster.eph." + session.$id;
+    const sid = ctx.user.$id; const key = "attend.eph." + session.$id;
     let eph = sessionStorage.getItem(key); if (!/^[0-9a-f]{12}$/.test(eph || "")) { eph = util.randomHex(6); sessionStorage.setItem(key, eph); }
     const st = { device: null, ble: false, face: null, submitted: false, heard: new Map(), posted: new Set(), lecturerHeard: false };
     const needFace = !!session.requireFace; const endsAt = +new Date(session.endTime);
@@ -307,21 +331,22 @@ FILE OVERVIEW
 
     el.innerHTML = `<div class="card"><div class="row between"><h2>Verify attendance</h2><span class="badge info" id="vLeft"></span></div>${M.android.isAvailable() ? "" : M.android.notice()}
       <ol class="steps"><li id="s1"><div><b>Check this phone</b><span class="muted small" id="s1t">Bluetooth must be on and permissions granted.</span><div class="table-actions" style="margin-top:.4rem"><button class="btn sm" id="b1">Check phone</button></div></div></li>
-      <li id="s2"><div><b>Turn on Bluetooth verification</b><span class="muted small" id="s2t">Your phone shares a temporary code (no name or matric number) and listens for nearby verified phones.</span><div class="table-actions" style="margin-top:.4rem"><button class="btn sm" id="b2" disabled>Start</button></div></div></li>
+      <li id="s2"><div><b>Start listening</b><span class="muted small" id="s2t">Your phone listens for the lecturer and for classmates the lecturer has approved. It broadcasts nothing until your lecturer approves you.</span><div class="table-actions" style="margin-top:.4rem"><button class="btn sm" id="b2" disabled>Start</button></div></div></li>
       ${needFace ? `<li id="s3"><div><b>Verify your face</b><span class="muted small" id="s3t">This session requires a face check. Your face template is shared with the course lecturer for this check.</span><div class="table-actions" style="margin-top:.4rem"><button class="btn sm" id="b3" disabled>Open camera</button></div></div></li>` : ""}
       <li id="s4"><div><b>Submit for lecturer review</b><span class="muted small" id="s4t">The lecturer confirms your attendance. Being detected alone does not mark you present.</span><div class="table-actions" style="margin-top:.4rem"><button class="btn accent sm" id="b4" disabled>Submit</button></div></div></li></ol></div>`;
     const $ = (id) => el.querySelector("#" + id); const mark = (id, cls) => { const li = $(id); li.className = cls || ""; };
     const left = setInterval(() => { const ms = endsAt - Date.now(); $("vLeft").textContent = ms > 0 ? ui.fmt.mmss(ms) + " left" : "Session ended"; if (ms <= 0) { clearInterval(left); clearInterval(flushT); $("b4").disabled = true; } }, 1000);
 
     $("b1").addEventListener("click", () => ui.busy($("b1"), async () => {
-      let r = await M.android.readiness(true);
-      if (!r.ok && M.android.isAvailable() && r.problems.some((p) => /permission/i.test(p))) { try { await M.android.requestPermissions(); r = await M.android.readiness(true); } catch (_) {} }
+      let r = await M.android.readiness(false);
+      if (!r.ok && M.android.isAvailable() && r.problems.some((p) => /permission/i.test(p))) { try { await M.android.requestPermissions(); r = await M.android.readiness(false); } catch (_) {} }
       $("s1t").textContent = r.ok ? "This phone is ready." : r.problems.join(" "); mark("s1", r.ok ? "done" : "fail"); st.device = r.ok; $("b2").disabled = !r.ok; if (r.ok) mark("s2", "now");
     }));
     $("b2").addEventListener("click", () => ui.busy($("b2"), async () => {
       try {
-        const base = { sessionId: session.$id, sessionTag: session.sessionTag, ephemeralId: eph, endsAt };
-        await M.android.startAdvertising(Object.assign({ role: "student" }, base)); await M.android.startScan(Object.assign({ role: "student" }, base));
+        const base = { sessionId: session.$id, sessionTag: session.sessionTag, ephemeralId: eph, endsAt }; st.base = base;
+        // Listen only. This phone broadcasts nothing until the lecturer approves it (see watchApproval).
+        await M.android.startScan(Object.assign({ role: "student" }, base));
         st.ble = true; mark("s2", "done"); if (needFace) { $("b3").disabled = false; mark("s3", "now"); } else { $("b4").disabled = false; mark("s4", "now"); }
         offDev = M.android.on("devices", (arr) => { arr.forEach((d) => { if (d.ephemeralId !== eph) { st.heard.set(d.ephemeralId, d); if (d.role === "lecturer") st.lecturerHeard = true; } }); $("s2t").textContent = `Listening. ${st.heard.size} nearby device(s) heard${st.lecturerHeard ? ", including the lecturer's phone" : ""}.`; });
         M.android.on("error", (e) => ui.toast("Bluetooth: " + (e.message || e.code || "error"), "error"));
@@ -333,7 +358,10 @@ FILE OVERVIEW
     function faceStep() {
       const m = ui.modal({ title: "Verify your face", body: `<p class="muted small">Look at the camera in good light. Only you should be in the frame. This model has no liveness check.</p><div class="cam-box"><video id="cv" autoplay muted playsinline></video><div class="oval"></div></div><div id="fres" class="notice info small">Starting camera…</div>`, onClose: M.face.stopCamera, buttons: [{ text: "Close" }, { text: "Capture and verify", cls: "accent", id: "cap", async onClick() {
         const out = m.body.querySelector("#fres"); out.className = "notice info small"; out.textContent = "Checking…";
-        try { const canvas = M.face.capture(m.body.querySelector("#cv")); const r = await M.face.verify(sid, canvas); st.face = r;
+        try {
+          st.liveness = false;
+          if (M.cfg.face.livenessRequired) { const lv = await M.face.liveness(m.body.querySelector("#cv"), (t) => { out.className = "notice warn small"; out.textContent = t; }); if (!lv.ok) { out.className = "notice bad small"; out.textContent = lv.reason; return; } st.liveness = true; out.className = "notice info small"; out.textContent = "Checking your face…"; }
+          const canvas = M.face.capture(m.body.querySelector("#cv")); const r = await M.face.verify(sid, canvas); st.face = r;
           if (r.ok) { out.className = "notice ok small"; out.textContent = "Face matched on this phone. The lecturer will re-check it."; mark("s3", "done"); $("b4").disabled = false; mark("s4", "now"); setTimeout(m.close, 900); }
           else { out.className = "notice bad small"; out.textContent = "Face did not match. Retake in better light, facing the camera."; }
         } catch (e) { out.className = "notice bad small"; out.textContent = util.errMsg(e); }
@@ -356,13 +384,27 @@ FILE OVERVIEW
         if (needFace) await M.face.shareWithLecturer(sid, group.lecturerID);
         await flush();
         const data = { sessionID: session.$id, groupID: group.$id, studentID: sid, kind: "claim", detectedDeviceID: "claim", ephemeralID: eph, detectedAt: util.iso(), verificationStatus: "unreviewed" };
-        if (st.face) { data.faceScore = st.face.score; data.faceModelVersion = st.face.modelVersion; data.faceProbe = st.face.probe; }
+        if (st.face) { data.faceScore = st.face.score; data.faceModelVersion = st.face.modelVersion; data.faceProbe = st.face.probe; data.livenessPassed = !!st.liveness; }
         const c = await db.create("proximity", null, data, perm.evidence(sid, group.lecturerID));
         await M.audit(sid, "attendance.claim", "proximity_records", c.$id);
         done(c);
       } catch (e) { ui.toast(e.code === 409 ? "You already submitted for this session." : util.errMsg(e), "error"); }
     }));
-    function done(c) { st.submitted = true; mark("s4", "done"); $("s4t").textContent = "Submitted at " + ui.fmt.t(c.$createdAt) + ". Keep Bluetooth on and the app open until the session ends so others can use you as a reference."; $("b4").disabled = true; ui.toast("Submitted. Waiting for the lecturer.", "success"); }
+    function done(c) { st.submitted = true; mark("s4", "now"); $("s4t").textContent = "Submitted at " + ui.fmt.t(c.$createdAt) + ". Waiting for your lecturer to approve you. Keep the app open: once approved, your phone helps classmates verify."; $("b4").disabled = true; ui.toast("Submitted. Waiting for the lecturer.", "success"); watchApproval(c); }
+
+    // The lecturer's approval is a change to the claim document. Students have no update permission on it, so this is trustworthy.
+    function watchApproval(c) {
+      let on = false;
+      const apply = async (doc) => {
+        const ok = doc.verificationStatus === "accepted" && !!doc.$updatedAt && doc.$updatedAt !== doc.$createdAt;
+        if (ok && !on && Date.now() < endsAt) {
+          try { await M.android.startAdvertising(Object.assign({ role: "student" }, st.base)); on = true; mark("s4", "done"); $("s4t").textContent = "Approved by your lecturer. Your phone is now helping classmates verify. Keep the app open until the session ends."; ui.toast("Approved. Your phone is now broadcasting.", "success"); }
+          catch (e) { ui.toast("Approved, but Bluetooth broadcast failed: " + util.errMsg(e), "warning"); }
+        } else if (!ok && on) { try { await M.android.stopAdvertising(); } catch (_) {} on = false; mark("s4", "now"); $("s4t").textContent = "Your approval was withdrawn. Broadcasting stopped."; }
+      };
+      const un = db.subscribe(["proximity"], (ev) => { if (ev.payload && ev.payload.$id === c.$id) apply(ev.payload); });
+      const poll = setInterval(async () => { if (Date.now() > endsAt + 20000) { clearInterval(poll); try { un(); } catch (_) {} return; } try { apply(await db.get("proximity", c.$id)); } catch (_) {} }, 8000);
+    }
   }
 
   M.pages = M.pages || {};

@@ -7,7 +7,7 @@ FILE OVERVIEW
 // marks. Grades come from rules the lecturer configures per course (no built-in grading scale is imposed).
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, perm, ui } = M;
   const esc = util.esc;
   const CATS = [["test", "Test"], ["assignment", "Assignment"], ["exam", "Examination"], ["custom", "Custom"]];
@@ -95,7 +95,7 @@ FILE OVERVIEW
 
     function rulesModal() {
       const r = S.rules; const w = r.categoryWeights || {};
-      const m = ui.modal({ title: "Grading rules", wide: true, body: `<div class="notice info small">Muster does not assume a grading scale. Set the bands your institution uses. The bands below are only a starting point.</div>
+      const m = ui.modal({ title: "Grading rules", wide: true, body: `<div class="notice info small">Attend does not assume a grading scale. Set the bands your institution uses. The bands below are only a starting point.</div>
         <h3>Grade bands</h3><div id="bands"></div><button class="btn sm secondary" id="addBand" type="button">Add band</button>
         <h3 style="margin-top:1.2rem">Category weights (optional)</h3><p class="muted small">Leave all blank to grade on total marks. If you fill any in, each category's percentage is weighted by these numbers.</p><div class="form-grid">${CATS.map(([k, l]) => `<div class="field"><label>${l}</label><input type="number" min="0" step="any" data-w="${k}" value="${w[k] == null ? "" : w[k]}"></div>`).join("")}</div>
         <h3 style="margin-top:1.2rem">Attendance</h3><div class="form-grid"><div class="field"><label>Late counts as (0–1)</label><input type="number" id="lw" min="0" max="1" step="0.1" value="${r.attendance.lateWeight}"><div class="hint">1 = same as present, 0 = same as absent.</div></div><div class="field"><label>Minimum attendance %</label><input type="number" id="mp" min="0" max="100" value="${r.attendance.minimumPercent}"><div class="hint">Students below this are flagged on their dashboard.</div></div></div>`,

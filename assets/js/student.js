@@ -5,7 +5,7 @@ FILE OVERVIEW
 // component used by the lecturer profile page. Students can only READ official attendance and scores.
 
 (function () {
-  const M = window.Muster;
+  const M = window.Attend;
   const { db, Query, util, ui } = M;
   const esc = util.esc;
 
@@ -82,10 +82,12 @@ FILE OVERVIEW
       <div class="table-actions"><button class="btn" id="enrol" ${st.ready ? "" : "disabled"}>${enrol ? "Re-enrol face" : "Enrol face"}</button>${enrol ? '<button class="btn secondary" id="rmFace">Remove enrolment</button>' : ""}</div>`;
     el.querySelector("#enrol").addEventListener("click", () => {
       const N = M.cfg.face.enrolFrames; let shots = [];
-      const m = ui.modal({ title: "Enrol your face", body: `<p class="muted small">Face the camera in good light with nothing covering your face. We take ${N} quick photos. Only you should be in the frame.</p><div class="cam-box"><video id="cv" autoplay muted playsinline></video><div class="oval"></div></div><div id="est" class="notice info small">Starting camera…</div>`, onClose: M.face.stopCamera,
+      const m = ui.modal({ title: "Enrol your face", body: `<p class="muted small">Face the camera in good light with nothing covering your face. You will be asked to blink and turn your head (a liveness check), then we take ${N} quick photos. Only you should be in the frame.</p><div class="cam-box"><video id="cv" autoplay muted playsinline></video><div class="oval"></div></div><div id="est" class="notice info small">Starting camera…</div>`, onClose: M.face.stopCamera,
         buttons: [{ text: "Cancel" }, { text: "Capture", cls: "accent", async onClick() {
           const out = m.body.querySelector("#est"); out.className = "notice info small"; shots = [];
-          try { for (let i = 0; i < N; i++) { out.textContent = "Capturing " + (i + 1) + " of " + N + "…"; shots.push(M.face.capture(m.body.querySelector("#cv"))); await new Promise((r) => setTimeout(r, 450)); }
+          try {
+            if (M.cfg.face.livenessRequired) { const lv = await M.face.liveness(m.body.querySelector("#cv"), (t) => { out.className = "notice warn small"; out.textContent = t; }); if (!lv.ok) { out.className = "notice bad small"; out.textContent = lv.reason + " Press Capture to retry."; return; } out.className = "notice info small"; }
+            for (let i = 0; i < N; i++) { out.textContent = "Capturing " + (i + 1) + " of " + N + "…"; shots.push(M.face.capture(m.body.querySelector("#cv"))); await new Promise((r) => setTimeout(r, 450)); }
             out.textContent = "Creating template…"; await M.face.enrol(sid, shots); M.face.stopCamera(); ui.toast("Face enrolled.", "success"); m.close(); faceCard(el, ctx);
           } catch (e) { out.className = "notice bad small"; out.textContent = util.errMsg(e) + " Press Capture to retake."; }
         } }] });
