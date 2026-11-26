@@ -65,6 +65,7 @@ FILE OVERVIEW
     self: (id) => [Permission.read(u(id)), Permission.update(u(id)), Permission.delete(u(id))],
     lecturerOwned: (lecturerId, readers) => [Permission.read(u(lecturerId)), Permission.update(u(lecturerId)), Permission.delete(u(lecturerId)), ...(readers || []).map((r) => Permission.read(u(r)))],
     publicToUsers: (lecturerId) => [Permission.read(Role.users()), Permission.update(u(lecturerId)), Permission.delete(u(lecturerId))],
+    membership: (studentId, lecturerId) => [Permission.read(u(studentId)), Permission.read(u(lecturerId)), Permission.update(u(lecturerId)), Permission.delete(u(lecturerId)), Permission.delete(u(studentId))],
     request: (studentId, lecturerId) => [Permission.read(u(studentId)), Permission.read(u(lecturerId)), Permission.update(u(lecturerId)), Permission.delete(u(lecturerId)), Permission.delete(u(studentId))],
     evidence: (studentId, lecturerId) => [Permission.read(u(studentId)), Permission.read(u(lecturerId)), Permission.update(u(lecturerId)), Permission.delete(u(lecturerId))],
     readOnlyBy: (id) => [Permission.read(u(id))],

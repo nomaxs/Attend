@@ -45,7 +45,10 @@ FILE OVERVIEW
       const ra = root.querySelector("#readAll"); if (ra) ra.addEventListener("click", async () => { await Promise.allSettled(notes.filter((n) => !n.isRead).map((n) => db.update("notifications", n.$id, { isRead: true }))); draw(); });
     }
     await draw();
-    let t; unsub = db.subscribe(["notifications", "sessions", "records", "scores"], () => { clearTimeout(t); t = setTimeout(() => draw().catch(() => {}), 1000); });
+    let t; unsub = db.subscribe(["notifications", "sessions", "records", "scores", "groupMembers"], () => { clearTimeout(t); t = setTimeout(() => draw().catch(() => {}), 1000); });
+    // Realtime can be dropped by phones/networks, so also refresh on a timer and when the app returns to the foreground.
+    timer = setInterval(() => { if (document.visibilityState === "visible") draw().catch(() => {}); }, 15000);
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") draw().catch(() => {}); });
   }
 
   /* ---------- performance ---------- */

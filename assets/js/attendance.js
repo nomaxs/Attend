@@ -318,7 +318,8 @@ FILE OVERVIEW
       root.querySelectorAll("[data-verify]").forEach((b) => b.addEventListener("click", () => { const s = live.find((x) => x.$id === b.dataset.verify); panelOpen = true; b.disabled = true; verifyPanel(root.querySelector("#panel_" + s.$id), ctx, s, gmap[s.groupID]); }));
     }
     await draw();
-    unsub = db.subscribe(["sessions", "records"], (ev) => { clearTimeout(refreshT); refreshT = setTimeout(() => { if (!panelOpen) draw().catch(() => {}); else if ((ev.events || []).some((e) => /records/.test(e))) ui.toast("Your attendance record was updated.", "info"); }, 800); });
+    setInterval(() => { if (!panelOpen && document.visibilityState === "visible") draw().catch(() => {}); }, 15000);
+    unsub = db.subscribe(["sessions", "records", "groupMembers"], (ev) => { clearTimeout(refreshT); refreshT = setTimeout(() => { if (!panelOpen) draw().catch(() => {}); else if ((ev.events || []).some((e) => /records/.test(e))) ui.toast("Your attendance record was updated.", "info"); }, 800); });
   }
 
   /* ---------- the verification flow ---------- */

@@ -10,8 +10,8 @@ window.ATTEND_CONFIG = {
 
   /* ---- Appwrite connection ---- */
   endpoint: "https://nyc.cloud.appwrite.io/v1",
-  projectId: "6b0745aa0021ad1d621f",
-  databaseId: "6b0746190017a0a97b7f",
+  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+  databaseId: "REPLACE_WITH_YOUR_DATABASE_ID",
 
   // Collection IDs. These default to the IDs created by AttendBackend/setup-appwrite.mjs.
   // If you create collections by hand with other IDs, change the values (not the keys).
@@ -21,7 +21,6 @@ window.ATTEND_CONFIG = {
     lecturerProfiles: "lecturer_profiles",
     faceProfiles: "face_profiles",
     groups: "groups",
-    joinRequests: "join_requests",
     groupMembers: "group_members",
     sessions: "attendance_sessions",
     sessionSecrets: "session_secrets",
@@ -35,9 +34,9 @@ window.ATTEND_CONFIG = {
 
   // Storage bucket IDs (all private). Only needed for the optional features noted beside each one.
   buckets: {
-    faceReference: "face_reference",   // optional: retained enrolment photos (off by default)
-    faceTemplates: "face_templates",   // optional: template files (templates are stored in the face_profiles document by default)
-    exports: "exports"                 // optional: "Save to private storage" in Reports
+    faceReference: "REPLACE_WITH_FACE_REFERENCE_BUCKET_ID",   // optional: retained enrolment photos (off by default)
+    faceTemplates: "REPLACE_WITH_FACE_TEMPLATES_BUCKET_ID",   // optional: template files (templates are stored in the face_profiles document by default)
+    exports: "REPLACE_WITH_EXPORTS_BUCKET_ID"                 // optional: "Save to private storage" in Reports
   },
 
   /* ---- Lecturer authority (see AttendBackend/README.md, section "Why a Lecturers team") ----
@@ -47,8 +46,8 @@ window.ATTEND_CONFIG = {
      2) Add each verified lecturer to that team.
      3) Re-run setup-appwrite.mjs (or edit collection permissions) so lecturer collections use team:<id>.
      Leave empty for a pilot where every registered lecturer is trusted (NOT safe for production). */
-  lecturerTeamId: "lecturers",
-  
+  lecturerTeamId: "",
+
   /* ---- Attendance rules ---- */
   attendance: {
     minMinutes: 8,

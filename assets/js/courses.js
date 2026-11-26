@@ -2,8 +2,9 @@
 FILE OVERVIEW
 ========================= */
 // Course groups: lecturer management (create/edit/join codes/enrolment) and student joining + course detail views.
-// Membership model (no server code): a student files a join_request; the lecturer approves it, which creates the
-// group_members document. Only the lecturer (a Lecturers-team member in production) can create group_members.
+// Membership model: a student joins a course by entering its join code, which creates their own group_members document
+// straight away (no approval step). Joining never marks anyone present: attendance still needs the Bluetooth proof, the
+// lecturer's approval in the live roll and, when required, the face check. The lecturer can remove (and restore) any member.
 
 (function () {
   const M = window.Attend;
@@ -14,7 +15,7 @@ FILE OVERVIEW
   const data = {
     lecturerGroups: (lecturerId) => db.all("groups", [Query.equal("lecturerID", lecturerId), Query.orderDesc("createdAt")]),
     groupMembers: (groupId) => db.all("groupMembers", [Query.equal("groupID", groupId), Query.equal("status", "active"), Query.orderAsc("studentName")]),
-    pendingRequests: (groupId) => db.all("joinRequests", [Query.equal("groupID", groupId), Query.equal("status", "pending"), Query.orderAsc("requestedAt")]),
+    removedMembers: (groupId) => db.all("groupMembers", [Query.equal("groupID", groupId), Query.equal("status", "removed"), Query.orderAsc("studentName")]),
     async studentGroups(studentId) {
       const members = await db.all("groupMembers", [Query.equal("studentID", studentId), Query.equal("status", "active")]);
       const groups = members.length ? await db.allIn("groups", "$id", members.map((m) => m.groupID)) : [];
@@ -45,41 +46,34 @@ FILE OVERVIEW
     ];
   }
 
-  /* ---------- lecturer: enrolment panel (pending requests + enrolled students) ---------- */
-  async function approve(ctx, group, req) {
-    const lecturerId = ctx.user.$id; const now = util.iso();
-    const existing = await db.first("groupMembers", [Query.equal("groupID", group.$id), Query.equal("studentID", req.studentID)]);
-    if (existing) await db.update("groupMembers", existing.$id, { status: "active", studentName: req.studentName, matricNumber: req.matricNumber });
-    else await db.create("groupMembers", null, { groupID: group.$id, studentID: req.studentID, studentName: req.studentName, matricNumber: req.matricNumber, joinedAt: now, status: "active" }, perm.lecturerOwned(lecturerId, [req.studentID]));
-    await db.remove("joinRequests", req.$id);
-    await M.audit(lecturerId, "member.approve", "group_members", group.$id, null, { studentID: req.studentID });
-    await M.notify(req.studentID, "Joined " + group.courseCode, "You were added to " + group.courseName + ".", "course", group.$id);
-  }
-  async function reject(ctx, group, req) {
-    await db.update("joinRequests", req.$id, { status: "rejected" });
-    await M.notify(req.studentID, "Request declined", "Your request to join " + group.courseCode + " was declined.", "course", group.$id);
-  }
+  /* ---------- lecturer: enrolment panel (enrolled + removed students) ---------- */
   async function removeMember(ctx, group, member) {
     await db.update("groupMembers", member.$id, { status: "removed" });
     await M.audit(ctx.user.$id, "member.remove", "group_members", member.$id, { status: "active" }, { status: "removed", studentID: member.studentID });
     await M.notify(member.studentID, "Removed from " + group.courseCode, "You were removed from " + group.courseName + ".", "course", group.$id);
   }
+  async function restoreMember(ctx, group, member) {
+    await db.update("groupMembers", member.$id, { status: "active" });
+    await M.audit(ctx.user.$id, "member.restore", "group_members", member.$id, { status: "removed" }, { status: "active", studentID: member.studentID });
+    await M.notify(member.studentID, "Re-added to " + group.courseCode, "You can take part in " + group.courseName + " again.", "course", group.$id);
+  }
 
   async function enrolmentModal(ctx, group, onChange) {
     const m = ui.modal({ title: group.courseCode + " students", wide: true, body: ui.spinner() });
     async function draw() {
-      const [pending, members] = await Promise.all([data.pendingRequests(group.$id), data.groupMembers(group.$id)]);
+      const [members, removed] = await Promise.all([data.groupMembers(group.$id), data.removedMembers(group.$id)]);
       const q = (m.body.querySelector("#sq") || {}).value || "";
       const shown = members.filter((x) => !q || (x.studentName + " " + x.matricNumber).toLowerCase().includes(q.toLowerCase()));
-      m.body.innerHTML = `${pending.length ? `<h3>Waiting for approval (${pending.length})</h3><ul class="list">${pending.map((r) => `<li><div><b>${esc(r.studentName)}</b><div class="muted small">${esc(r.matricNumber)} · requested ${ui.fmt.dt(r.requestedAt)}</div></div><div class="table-actions"><button class="btn sm" data-a="ok" data-id="${r.$id}">Approve</button><button class="btn sm secondary" data-a="no" data-id="${r.$id}">Decline</button></div></li>`).join("")}</ul><hr style="border:0;border-top:1px solid var(--grey-200);margin:1rem 0">` : ""}
-        <div class="row between"><h3>Enrolled (${members.length})</h3><input id="sq" type="search" placeholder="Search name or matric no." value="${esc(q)}" style="max-width:260px"></div>
-        ${shown.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Matric no.</th><th>Joined</th><th></th></tr></thead><tbody>${shown.map((x) => `<tr><td>${esc(x.studentName)}</td><td>${esc(x.matricNumber)}</td><td>${ui.fmt.d(x.joinedAt)}</td><td><button class="btn sm danger" data-a="rm" data-id="${x.$id}">Remove</button></td></tr>`).join("")}</tbody></table></div>` : ui.empty("No students yet", "Share the join code " + group.joinCode + " with your class.")}`;
+      m.body.innerHTML = `<div class="row between"><h3>Enrolled (${members.length})</h3><input id="sq" type="search" placeholder="Search name or matric no." value="${esc(q)}" style="max-width:260px"></div>
+        <p class="muted small">Students join with the code ${esc(group.joinCode)} on their own. Remove anyone who should not be in this course.</p>
+        ${shown.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Matric no.</th><th>Joined</th><th></th></tr></thead><tbody>${shown.map((x) => `<tr><td>${esc(x.studentName)}</td><td>${esc(x.matricNumber)}</td><td>${ui.fmt.d(x.joinedAt)}</td><td><button class="btn sm danger" data-a="rm" data-id="${x.$id}">Remove</button></td></tr>`).join("")}</tbody></table></div>` : ui.empty("No students yet", "Share the join code " + group.joinCode + " with your class.")}
+        ${removed.length ? `<h3 style="margin-top:1.2rem">Removed (${removed.length})</h3><ul class="list">${removed.map((x) => `<li><span>${esc(x.studentName)} <span class="muted small">${esc(x.matricNumber)}</span></span><button class="btn sm secondary" data-a="re" data-id="${x.$id}">Restore</button></li>`).join("")}</ul>` : ""}`;
       const s = m.body.querySelector("#sq"); s.addEventListener("input", () => { const pos = s.selectionStart; draw().then(() => { const n = m.body.querySelector("#sq"); n.focus(); n.setSelectionRange(pos, pos); }); });
       m.body.querySelectorAll("button[data-a]").forEach((b) => b.addEventListener("click", async () => {
         const id = b.dataset.id; const a = b.dataset.a;
         try {
           if (a === "rm") { const mem = members.find((x) => x.$id === id); if (!(await ui.confirm({ title: "Remove student?", message: mem.studentName + " will lose access to this course. Their past attendance records are kept.", confirmText: "Remove", danger: true }))) return; await removeMember(ctx, group, mem); }
-          else { const req = pending.find((x) => x.$id === id); await ui.busy(b, () => (a === "ok" ? approve(ctx, group, req) : reject(ctx, group, req))); }
+          else await ui.busy(b, () => restoreMember(ctx, group, removed.find((x) => x.$id === id)));
           ui.toast("Done.", "success"); await draw(); if (onChange) onChange();
         } catch (e) { ui.toast(util.errMsg(e), "error"); }
       }));
@@ -92,14 +86,14 @@ FILE OVERVIEW
     const lecturerId = ctx.user.$id;
     async function draw() {
       const groups = await data.lecturerGroups(lecturerId);
-      const counts = await Promise.all(groups.map(async (g) => ({ id: g.$id, members: await data.count("groupMembers", [Query.equal("groupID", g.$id), Query.equal("status", "active")]), pending: await data.count("joinRequests", [Query.equal("groupID", g.$id), Query.equal("status", "pending")]) })));
+      const counts = await Promise.all(groups.map(async (g) => ({ id: g.$id, members: await data.count("groupMembers", [Query.equal("groupID", g.$id), Query.equal("status", "active")]) })));
       const c = util.by(counts, "id");
       root.innerHTML = ui.pageHead("Courses", "Create course groups, share join codes and manage who is enrolled.", '<button class="btn accent" id="newCourse">New course</button>') +
         (groups.length ? `<div class="grid cols-2">${groups.map((g) => `<article class="card course-card">
           <div class="row between"><span class="code">${esc(g.courseCode)}</span>${ui.badge(g.isActive ? "active" : "closed")}</div>
           <h3>${esc(g.courseName)}</h3><p class="muted small">${esc(g.description || "No description")}<br>${esc(g.institution)} · ${esc(g.department)} · created ${ui.fmt.d(g.createdAt)}</p>
           <div class="row"><span class="joincode" title="Join code">${esc(g.joinCode)}</span><button class="btn sm secondary" data-a="copy" data-id="${g.$id}">Copy</button><button class="btn sm ghost" data-a="regen" data-id="${g.$id}">New code</button></div>
-          <div class="row small"><span><b>${c[g.$id].members}</b> enrolled</span>${c[g.$id].pending ? `<span class="badge pending">${c[g.$id].pending} waiting</span>` : ""}</div>
+          <div class="row small"><span><b>${c[g.$id].members}</b> enrolled</span></div>
           <div class="table-actions"><button class="btn sm" data-a="students" data-id="${g.$id}">Students</button><a class="btn sm secondary" href="attendance.html?group=${g.$id}">Attendance</a><a class="btn sm secondary" href="gradebook.html?group=${g.$id}">Gradebook</a><button class="btn sm secondary" data-a="edit" data-id="${g.$id}">Edit</button><button class="btn sm ghost" data-a="toggle" data-id="${g.$id}">${g.isActive ? "Close joining" : "Reopen"}</button></div>
         </article>`).join("")}</div>` : `<div class="card">${ui.empty("No courses yet", "Create your first course group to get a join code for your students.")}</div>`);
       root.querySelector("#newCourse").addEventListener("click", () => ui.formModal({ title: "New course", fields: courseFields(null, ctx), submitText: "Create course", async onSubmit(v) { const g = await createGroupDoc(ctx, v); await M.audit(lecturerId, "group.create", "groups", g.$id, null, { courseCode: g.courseCode }); ui.toast("Course created. Join code: " + g.joinCode, "success"); draw(); } }));
@@ -156,12 +150,10 @@ FILE OVERVIEW
   async function studentCourses(root, ctx) {
     const sid = ctx.user.$id;
     async function draw() {
-      const [{ groups }, requests] = await Promise.all([data.studentGroups(sid), db.all("joinRequests", [Query.equal("studentID", sid)])]);
-      const reqGroups = requests.length ? await db.allIn("groups", "$id", requests.map((r) => r.groupID)) : []; const rg = util.by(reqGroups, "$id");
-      root.innerHTML = ui.pageHead("My courses", "Join a course with the code from your lecturer.") +
-        `<div class="card"><h2>Join a course</h2><form id="joinForm" class="row"><div class="grow"><input id="joinCode" type="text" placeholder="Join code, e.g. K7M2QX9P" maxlength="12" autocapitalize="characters" autocomplete="off" aria-label="Join code" required></div><button class="btn accent" type="submit">Request to join</button></form><p class="muted small" style="margin:.6rem 0 0">Your lecturer approves each request before you are enrolled.</p></div>` +
-        (requests.length ? `<div class="card"><h2>Requests</h2><ul class="list">${requests.map((r) => `<li><div><b>${esc((rg[r.groupID] || {}).courseCode || "Course")}</b> <span class="muted small">${esc((rg[r.groupID] || {}).courseName || "")}</span></div><div class="row">${ui.badge(r.status)}<button class="btn sm secondary" data-del="${r.$id}">${r.status === "pending" ? "Cancel" : "Dismiss"}</button></div></li>`).join("")}</ul></div>` : "") +
-        `<h2 style="margin:1.4rem 0 .6rem">Joined courses</h2>` + (groups.length ? `<div class="grid cols-2">${groups.map((g) => `<article class="card course-card"><span class="code">${esc(g.courseCode)}</span><h3>${esc(g.courseName)}</h3><p class="muted small">${esc(g.lecturerName)} · ${esc(g.department)}</p><div class="table-actions"><button class="btn sm" data-view="${g.$id}">View course</button></div></article>`).join("")}</div>` : `<div class="card">${ui.empty("No courses yet", "Enter a join code above to request enrolment.")}</div>`);
+      const { members, groups } = await data.studentGroups(sid); const memOf = util.by(members, "groupID");
+      root.innerHTML = ui.pageHead("My courses", "Enter the join code from your lecturer. You are added straight away.") +
+        `<div class="card"><h2>Join a course</h2><form id="joinForm" class="row"><div class="grow"><input id="joinCode" type="text" placeholder="Join code, e.g. K7M2QX9P" maxlength="12" autocapitalize="characters" autocomplete="off" aria-label="Join code" required></div><button class="btn accent" type="submit">Join course</button></form><p class="muted small" style="margin:.6rem 0 0">Joining does not mark you present. Attendance is only recorded when you verify in the classroom with Bluetooth (and a face check when the lecturer requires it).</p></div>` +
+        `<h2 style="margin:1.4rem 0 .6rem">Joined courses</h2>` + (groups.length ? `<div class="grid cols-2">${groups.map((g) => `<article class="card course-card"><span class="code">${esc(g.courseCode)}</span><h3>${esc(g.courseName)}</h3><p class="muted small">${esc(g.lecturerName)} · ${esc(g.department)}</p><div class="table-actions"><button class="btn sm" data-view="${g.$id}">View course</button><button class="btn sm ghost" data-leave="${g.$id}">Leave</button></div></article>`).join("")}</div>` : `<div class="card">${ui.empty("No courses yet", "Enter a join code above to join your first course.")}</div>`);
       root.querySelector("#joinForm").addEventListener("submit", async (e) => {
         e.preventDefault(); const btn = e.target.querySelector("button"); const code = root.querySelector("#joinCode").value.trim().toUpperCase();
         if (!/^[A-Z0-9]{6,12}$/.test(code)) return ui.toast("Enter the join code exactly as given.", "warning");
@@ -169,21 +161,28 @@ FILE OVERVIEW
           try {
             const g = await db.first("groups", [Query.equal("joinCode", code), Query.equal("isActive", true)]);
             if (!g) return ui.toast("No open course matches that code.", "error");
-            if (groups.some((x) => x.$id === g.$id)) return ui.toast("You are already enrolled in " + g.courseCode + ".", "warning");
-            await db.create("joinRequests", null, { groupID: g.$id, studentID: sid, studentName: ctx.profile.fullName, matricNumber: ctx.student ? ctx.student.matricNumber : "", requestedAt: util.iso(), status: "pending" }, perm.request(sid, g.lecturerID));
-            await M.notify(g.lecturerID, "New join request", ctx.profile.fullName + " asked to join " + g.courseCode + ".", "course", g.$id);
-            ui.toast("Request sent to " + g.lecturerName + ". You will be notified when it is approved.", "success"); draw();
-          } catch (err) { ui.toast(err.code === 409 ? "You already have a request for this course." : util.errMsg(err), "error"); }
+            const old = await db.first("groupMembers", [Query.equal("groupID", g.$id), Query.equal("studentID", sid)]);
+            if (old && old.status === "active") return ui.toast("You are already in " + g.courseCode + ".", "warning");
+            if (old) return ui.toast("You were removed from " + g.courseCode + ". Ask your lecturer to restore you.", "error");
+            await db.create("groupMembers", null, { groupID: g.$id, studentID: sid, studentName: ctx.profile.fullName, matricNumber: ctx.student ? ctx.student.matricNumber : "", joinedAt: util.iso(), status: "active" }, perm.membership(sid, g.lecturerID));
+            await M.audit(sid, "member.join", "group_members", g.$id, null, { courseCode: g.courseCode });
+            M.notify(g.lecturerID, "Student joined " + g.courseCode, ctx.profile.fullName + " joined with the join code.", "course", g.$id);
+            ui.toast("You joined " + g.courseCode + " · " + g.courseName + ".", "success"); draw();
+          } catch (err) { ui.toast(err.code === 409 ? "You are already in this course." : util.errMsg(err), "error"); }
         });
       });
-      root.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", async () => { try { await db.remove("joinRequests", b.dataset.del); draw(); } catch (e) { ui.toast(util.errMsg(e), "error"); } }));
       root.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => courseDetail(groups.find((g) => g.$id === b.dataset.view), sid)));
+      root.querySelectorAll("[data-leave]").forEach((b) => b.addEventListener("click", async () => {
+        const g = groups.find((x) => x.$id === b.dataset.leave);
+        if (!(await ui.confirm({ title: "Leave " + g.courseCode + "?", message: "You will stop seeing its attendance sessions. Your past records stay with the course. You can rejoin with the code.", confirmText: "Leave", danger: true }))) return;
+        try { await db.remove("groupMembers", memOf[g.$id].$id); ui.toast("You left " + g.courseCode + ".", "success"); draw(); } catch (e) { ui.toast(util.errMsg(e), "error"); }
+      }));
     }
     await draw();
   }
 
   M.data = data;
-  M.courses = { approve, reject, removeMember, enrolmentModal, courseDetail, loadCourseData, summarise };
+  M.courses = { removeMember, restoreMember, enrolmentModal, courseDetail, loadCourseData, summarise };
   M.pages = M.pages || {};
   M.pages["lecturer/courses"] = lecturerCourses;
   M.pages["student/courses"] = studentCourses;
