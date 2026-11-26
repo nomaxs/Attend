@@ -10,8 +10,8 @@ window.ATTEND_CONFIG = {
 
   /* ---- Appwrite connection ---- */
   endpoint: "https://nyc.cloud.appwrite.io/v1",
-  projectId: "6b0745aa0021ad1d621f",
-  databaseId: "6b0746190017a0a97b7f",
+  projectId: "REPLACE_WITH_YOUR_PROJECT_ID",
+  databaseId: "REPLACE_WITH_YOUR_DATABASE_ID",
 
   // Collection IDs. These default to the IDs created by AttendBackend/setup-appwrite.mjs.
   // If you create collections by hand with other IDs, change the values (not the keys).
@@ -66,8 +66,13 @@ window.ATTEND_CONFIG = {
   face: {
     // Attend does not ship a face recognition model. See AttendWebsite/assets/models/README.md.
     // Until a model adapter is installed, face enrolment/verification is switched off and the UI says so.
-    scriptPath: "assets/vendor/face-api.min.js",     // you add this file
-    modelPath: "assets/models",                       // you add the model weight files here
+    // Where to load the face runtime and model weights from. Tried in order; the first that works is used and the browser caches it.
+    // 1) a local copy (only if you ran AttendBackend/fetch-face-model.mjs), 2) a pinned CDN copy, 3) the CDN's latest copy.
+    sources: [
+      { script: "assets/vendor/face-api.min.js", models: "assets/models" },
+      { script: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js", models: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model" },
+      { script: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js", models: "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model" }
+    ],
     metric: "euclidean",                              // "euclidean" (pass when distance <= threshold) or "cosine" (pass when similarity >= threshold)
     threshold: 0.55,                                  // face-api.js suggests 0.6 as an upper bound; 0.55 is stricter. Tune on YOUR test data.
     modelVersion: "face-api-resnet128-v1",

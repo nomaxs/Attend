@@ -31,10 +31,23 @@ FILE OVERVIEW
   const faceApiAdapter = {
     name: "face-api.js", version: C.modelVersion,
     async load() {
-      if (!window.faceapi) await loadScript(base() + C.scriptPath);
-      if (!window.faceapi) throw new Error("face-api.js did not initialise.");
-      const url = base() + C.modelPath;
-      await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(url), faceapi.nets.faceLandmark68TinyNet.loadFromUri(url), faceapi.nets.faceRecognitionNet.loadFromUri(url)]);
+      const abs = (u) => (/^https?:\/\//.test(u) ? u : base() + u);
+      let last = null;
+      for (const src of C.sources || []) {
+        try {
+          if (!window.faceapi) await loadScript(abs(src.script));
+          if (!window.faceapi) throw new Error("face-api.js did not initialise from " + src.script);
+          if (faceapi.tf) { // the bundled TensorFlow.js must pick a backend before any model runs
+            let ok = false; try { ok = await faceapi.tf.setBackend("webgl"); } catch (_) {}
+            if (!ok) await faceapi.tf.setBackend("cpu");
+            await faceapi.tf.ready();
+          }
+          const url = abs(src.models).replace(/\/+$/, "");
+          await Promise.all([faceapi.nets.tinyFaceDetector.loadFromUri(url), faceapi.nets.faceLandmark68TinyNet.loadFromUri(url), faceapi.nets.faceRecognitionNet.loadFromUri(url)]);
+          return;
+        } catch (e) { last = e; }
+      }
+      throw new Error("Could not load the face model from any source (" + ((last && last.message) || "no sources configured") + ").");
     },
     async landmarks(input) {
       const r = await faceapi.detectSingleFace(input, new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.5 })).withFaceLandmarks(true);

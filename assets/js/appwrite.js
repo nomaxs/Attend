@@ -87,6 +87,9 @@ FILE OVERVIEW
     group(arr, key) { const o = {}; arr.forEach((x) => { (o[x[key]] = o[x[key]] || []).push(x); }); return o; },
     errMsg(e) {
       if (!e) return "Something went wrong.";
+      if (e.code === 401 && /unauthorized|not authorized/i.test(String(e.type || "") + " " + String(e.message || "")) && !/session|jwt/i.test(String(e.type || ""))) {
+        return "Appwrite says your account is not allowed to do this. If you are a lecturer: your account must be in the Lecturers team, and lecturerTeamId must be set in config.js. Otherwise log out and back in.";
+      }
       if (e.code === 401) return "Your session has expired. Please log in again.";
       if (e.code === 403) return "You do not have permission to do that.";
       if (e.code === 409) return "That record already exists.";
